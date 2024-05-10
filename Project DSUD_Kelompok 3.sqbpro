@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="D:/Materi Kuliah UI/Database untuk Sains Data/Tugas Database untuk Sains Data/Project DSUD_Kelompok 3.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="0"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="2131"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><current_table name="4,7:mainMEMBELI"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="AKUN" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_"><sort/><column_widths><column index="1" value="157"/><column index="2" value="98"/><column index="3" value="56"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="MEMBELI" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_"><sort/><column_widths><column index="1" value="92"/><column index="2" value="130"/><column index="3" value="62"/><column index="4" value="150"/><column index="5" value="56"/><column index="6" value="142"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1">/* Creating Table */
+
+CREATE TABLE PELANGGAN (
+  id_p INTEGER PRIMARY KEY,
+  nama_dp TEXT,
+  nama_b TEXT,
+  NoHP_p INTEGER,
+  alamat_p TEXT,
+  email_p TEXT,
+  TL_p TEXT,
+  umur_p INTEGER
+);
+
+CREATE TABLE AKUN (
+  username TEXT PRIMARY KEY,
+  password TEXT,
+  id_p INTEGER,
+  FOREIGN KEY(id_p) REFERENCES PELANGGAN(id_p)
+);
+
+CREATE TABLE JENIS (
+  kode_prod INTEGER PRIMARY KEY AUTOINCREMENT,
+  klasifikasi_prod TEXT
+);
+
+CREATE TABLE SUKU_CADANG (
+  no_prod INTEGER PRIMARY KEY AUTOINCREMENT,
+  kode_prod INTEGER,
+  nama_prod TEXT,
+  kuantitas_prod INTEGER,
+  harga_jual NUMERIC,
+  FOREIGN KEY (kode_prod) REFERENCES JENIS(kode_prod)
+);
+
+CREATE TABLE MEMBELI (
+  id_pembelian INTEGER PRIMARY KEY AUTOINCREMENT,
+  tanggal_pembelian TEXT,
+  no_prod INTEGER,
+  hargatotal_pembelian NUMERIC,
+  id_p INTEGER,
+  kuantitas_pembelian TEXT,
+  FOREIGN KEY (id_p) REFERENCES PELANGGAN(id_p),
+  FOREIGN KEY (no_prod) REFERENCES SUKU_CADANG(no_prod) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE KARYAWAN (
+  id_kar INTEGER PRIMARY KEY,
+  nama_kar TEXT,
+  alamat_kar TEXT,
+  NoHP_kar TEXT,
+  kode_prod INTEGER,
+  tugas TEXT,
+  FOREIGN KEY(kode_prod) REFERENCES JENIS(kode_prod)
+);
+
+CREATE TABLE PESANAN (
+  no_prod INTEGER PRIMARY KEY,
+  harga_beli NUMERIC,
+  FOREIGN KEY (no_prod) REFERENCES SUKU_CADANG (no_prod)
+);
+
+CREATE TABLE DISTRIBUTOR (
+  id_d INTEGER PRIMARY KEY,
+  nama_d TEXT,
+  alamat_d TEXT,
+  NoHP_d INTEGER
+);
+
+CREATE TABLE RIWAYAT_BELANJA_DARI (
+  id_pesan INTEGER PRIMARY KEY AUTOINCREMENT,
+  tanggal_pesan TEXT,
+  no_prod INTEGER,
+  kuantitas_pesan INTEGER,
+  hargatotal_pesanan NUMERIC,
+  id_d INTEGER,
+  FOREIGN KEY (no_prod) REFERENCES PESANAN (no_prod) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (id_d) REFERENCES DISTRIBUTOR (id_d)
+);
+
+/* Creating Trigger */
+
+/* Age calculation in TABLE PELANGGAN */
+
+CREATE TRIGGER calculate_age_trigger AFTER INSERT ON PELANGGAN
+BEGIN
+    UPDATE PELANGGAN
+    SET umur_p = (strftime('%Y', 'now') - strftime('%Y', TL_p)) -
+              CASE WHEN strftime('%m-%d', 'now') &lt; strftime('%m-%d', TL_p)
+                   THEN 1 ELSE 0 END
+    WHERE id_p = NEW.id_p;
+END;
+
+CREATE TRIGGER update_age_trigger AFTER UPDATE OF TL_p ON PELANGGAN
+BEGIN
+    UPDATE PELANGGAN
+    SET umur_p = (strftime('%Y', 'now') - strftime('%Y', NEW.TL_p)) -
+              CASE WHEN strftime('%m-%d', 'now') &lt; strftime('%m-%d', NEW.TL_p)
+                   THEN 1 ELSE 0 END
+    WHERE id_p = NEW.id_p;
+END;
+
+/* Updating quantity available after restocking and order in TABLE SUKU_CADANG */
+
+CREATE TRIGGER update_quantity_available
+AFTER INSERT ON MEMBELI
+FOR EACH ROW
+BEGIN
+    UPDATE SUKU_CADANG
+    SET kuantitas_prod = kuantitas_prod - NEW.kuantitas_pembelian
+    WHERE no_prod = NEW.no_prod;
+END;
+
+CREATE TRIGGER update_quantity_available2
+AFTER INSERT ON RIWAYAT_BELANJA_DARI
+FOR EACH ROW
+BEGIN
+    UPDATE SUKU_CADANG
+    SET kuantitas_prod = kuantitas_prod + NEW.kuantitas_pesan
+    WHERE no_prod = NEW.no_prod;
+END;
+
+/* Adding the total price for restocking and order in TABLE MEMBELI and TABLE RIWAYAT_BELANJA_DARI */
+
+CREATE TRIGGER update_total_price
+AFTER INSERT ON MEMBELI
+FOR EACH ROW
+BEGIN
+  UPDATE MEMBELI
+  SET hargatotal_pembelian = (SELECT kuantitas_pembelian * SUKU_CADANG.harga_jual FROM SUKU_CADANG WHERE SUKU_CADANG.no_prod = NEW.no_prod)
+  WHERE id_pembelian = NEW.id_pembelian;
+END;
+
+CREATE TRIGGER update_total_price2
+AFTER UPDATE ON MEMBELI
+FOR EACH ROW
+BEGIN
+  UPDATE MEMBELI
+  SET hargatotal_pembelian = (SELECT kuantitas_pembelian * SUKU_CADANG.harga_jual FROM SUKU_CADANG WHERE SUKU_CADANG.no_prod = NEW.no_prod)
+  WHERE id_pembelian = NEW.id_pembelian;
+END;
+
+CREATE TRIGGER update_total_price3
+AFTER INSERT ON RIWAYAT_BELANJA_DARI
+FOR EACH ROW
+BEGIN
+  UPDATE RIWAYAT_BELANJA_DARI
+  SET hargatotal_pesanan = (SELECT kuantitas_pesan * PESANAN.harga_beli FROM PESANAN WHERE PESANAN.no_prod = NEW.no_prod)
+  WHERE id_pesan = NEW.id_pesan;
+END;
+
+CREATE TRIGGER update_total_price4
+AFTER UPDATE ON RIWAYAT_BELANJA_DARI
+FOR EACH ROW
+BEGIN
+  UPDATE RIWAYAT_BELANJA_DARI
+  SET hargatotal_pesanan = (SELECT kuantitas_pesan * PESANAN.harga_beli FROM PESANAN WHERE PESANAN.no_prod = NEW.no_prod)
+  WHERE id_pesan = NEW.id_pesan;
+END;
+
+/* Adding Records */
+
+INSERT INTO PELANGGAN (id_p, nama_dp, nama_b, alamat_p, TL_p, email_p, NoHP_p) VALUES 
+(1000001, 'Stacy', 'Wagner', 'Jalan Aipda Karel Satsuit Tubun, Jakarta', '1958-01-18', 'Stacy9341@gmail.com', 6284219257513),
+(1000002, 'Colleen', 'Smith', 'Jalan Asia Afrika, Bandung', '1975-03-25', 'Colleen9673@gmail.com', 6284550522882),
+(1000003, 'Timothy', 'Wells', 'Jalan Pahlawan Bedul, Makassar', '1979-07-22', 'Timothy8773@gmail.com', 6282399105057),
+(1000004, 'Frank', 'Smith', 'Jalan Mawar, Jakarta', '1952-04-30', 'Frank920@gmail.com', 6284491079635),
+(1000005, 'Adriana', 'Galloway', 'Jalan Banteng, Semarang', '1961-11-30', 'Adriana718@gmail.com', 6283542420250),
+(1000006, 'Jill', 'Wagner', 'Jalan Formulae, Jakarta', '1976-07-23', 'Jill1465@gmail.com', 6286535804163),
+(1000007, 'Christy', 'Cox', 'Jalan Bintang, Jakarta', '1991-06-22', 'Christy4220@gmail.com', 6284682498686),
+(1000008, 'Michelle', 'Fitzpatrick', 'Jalan Matahari, Jayapura', '1963-03-28', 'Michelle3992@gmail.com', 6285533851992),
+(1000009, 'Jessica', 'Grant', 'Jalan Jupiter, Surabaya', '1990-04-06', 'Jessica7956@gmail.com', 6284594960174),
+(1000010, 'Christina', 'Williams', 'Jalan Saturn, Banyuwangi', '1986-07-14', 'Christina3200@gmail.com', 6283327256322),
+(1000011, 'Heather', 'Johnson', 'Jalan Mars, Blitar', '1958-11-21', 'Heather9697@gmail.com', 6280688352264),
+(1000012, 'Sara', 'Brown', 'Jalan Neptunus, Merauke', '1967-10-31', 'Sara6130@gmail.com', 6286299442155),
+(1000013, 'Andrew', 'Torres', 'Jalan Hatta, Cirebon', '1992-10-11', 'Andrew3146@gmail.com', 6284525262483),
+(1000014, 'Brent', 'Robertson', 'Jalan Imam Bonjol, Padang', '1983-06-29', 'Brent4643@gmail.com', 6285133175448),
+(1000015, 'Christopher', 'Hebert', 'Jalan Diponegoro, Jakarta', '1977-12-30', 'Christopher3917@gmail.com', 6286484887175),
+(1000016, 'Ashley', 'Scott', 'Jalan Sam Ratulangi, Manado', '1977-12-23', 'Ashley4379@gmail.com', 6281265825535),
+(1000017, 'Christina', 'Wright', 'Jalan Pattimura, Ambon', '1982-04-27', 'Christina3630@gmail.com', 6284986150812),
+(1000018, 'Sarah', 'Jones', 'Jalan Dewi Sartika, Solo', '1975-09-27', 'Sarah1961@gmail.com', 6282400976621),
+(1000019, 'Elizabeth', 'Ford', 'Jalan Damar, Jakarta', '1972-07-02', 'Elizabeth8853@gmail.com', 6289017740418),
+(1000020, 'Patrick', 'Wallace', 'Jalan Kawi, Yogyakarta', '1994-12-16', 'Patrick4232@gmail.com', 6283486621438);
+
+INSERT INTO JENIS (kode_prod, klasifikasi_prod) VALUES 
+(1, 'Kelistrikan'),
+(2, 'Transmisi'),
+(3, 'Karet'),
+(4, 'Logam');
+
+INSERT INTO DISTRIBUTOR (id_d, nama_d, alamat_d, NoHP_d) VALUES 
+(320001, 'Distributor A', 'Jalan Blitar,Jakarta', 6284206969101),
+(320002, 'Distributor B', 'Jalan Kertanegara,Jakarta', 6284206962911),
+(320003, 'Distributor C', 'Jalan Sumur Batu, Jakarta', 6284206967212),
+(320004, 'Distributor D', 'Jalan Hang Tuah, Jakarta', 6284206968203);
+
+INSERT INTO AKUN (id_p, username, password) VALUES 
+  (1000001, 'Tyler9401@gmail.com', 'P8PSHqz4MWIC'),
+  (1000002, 'Nancy3456@gmail.com', 'rRcHyKuCEsN'),
+  (1000003, 'Melanie9053@gmail.com', 'f2HP3UcJi1'),
+  (1000004, 'Matthew3257@gmail.com', '8B9PBLKx'),
+  (1000005, 'Robert3564@gmail.com', 'fee1WU7ogpkv'),
+  (1000006, 'Sarah2668@gmail.com', '45jr0WOeV'),
+  (1000007, 'Brian9932@gmail.com', 'qSuTGuqD72B'),
+  (1000008, 'Joseph2204@gmail.com', 'oQDdFgsGC4'),
+  (1000009, 'Ryan1127@gmail.com', 'nmkhW2oST'),
+  (1000010, 'Manuel6201@gmail.com', 'y5lrISuf'),
+  (1000011, 'Craig3559@gmail.com', 'SJqyAw2RMPJ'),
+  (1000012, 'Erin663@gmail.com', 'UeTmreCd'),
+  (1000013, 'Tammy3622@gmail.com', 'Sna34iJa7'),
+  (1000014, 'Michael7700@gmail.com', 'SOU3loXzw'),
+  (1000015, 'Elizabeth9970@gmail.com', 'qSOacFwE'),
+  (1000016, 'John8100@gmail.com', 'g6V8Yq5NL'),
+  (1000017, 'Tyler836@gmail.com', 'wegsJjUxN'),
+  (1000018, 'Andrew5157@gmail.com', 'ffgNqRDLMPs'),
+  (1000019, 'Jason3936@gmail.com', 'wGGx7rMbz0'),
+  (1000020, 'Alison9631@gmail.com', 'y52IgcFzCO');
+
+INSERT INTO KARYAWAN (id_kar, nama_kar, alamat_kar, NoHP_kar, tugas, kode_prod) VALUES 
+  (90001, 'Ahmad Utomo', 'Jalan Gadjah Mada, Jakarta', 6286726212303, 'Pembelian', 1),
+  (90002, 'Bambang Hartono', 'Jalan Joyoboyo, Jakarta', 6281662695309, 'Pemesanan', 1),
+  (90003, 'Dwi Prabowo', 'Jalan Kebon Sirih, Jakarta', 6283509659693, 'Penyimpanan', 1),
+  (90004, 'Edi Santoso', 'Jalan Arjuno, Jakarta', 6280482241048, 'Perawatan', 1),
+  (90005, 'Faisal Suryanto', 'Jalan Majapahit, Jakarta', 6282840996043, 'Pembelian', 2),
+  (90006, 'Gunawan Suryanto', 'Jalan Dukuh, Jakarta', 6288133061387, 'Pemesanan', 2),
+  (90007, 'Hendro Santoso', 'Jalan Sriwijaya, Jakarta', 6288916385030, 'Penyimpanan', 2),
+  (90008, 'Irfan Kusuma', 'Jalan Dharmawangsa, Jakarta', 6284738309123, 'Perawatan', 2),
+  (90009, 'Joko Utomo', 'Jalan Ampera Raya, Jakarta', 6285144997906, 'Pembelian', 3),
+  (90010, 'Kurniawan Hartono', 'Jalan Margonda, Jakarta', 6285862946762, 'Pemesanan', 3),
+  (90011, 'Lukman Prabowo', 'Jalan Bintaro Raya, Jakarta', 6283277419803, 'Penyimpanan', 3),
+  (90012, 'Maulana Suryanto', 'Jalan Raya Condet, Jakarta', 6280194979693, 'Perawatan', 3),
+  (90013, 'Nugroho Prabowo', 'Jalan Raya Cipayung, Jakarta', 6280014862792, 'Pembelian', 4),
+  (90014, 'Onno Hartono', 'Jalan Jaksa, Jakarta', 6286011952150, 'Pemesanan', 4),
+  (90015, 'Prabowo Utomo', 'Jalan Jambore, Jakarta', 6284750515493, 'Penyimpanan', 4),
+  (90016, 'Rizki Nugroho', 'Jalan Pluit, Jakarta', 6281293073983, 'Perawatan', 4);
+
+INSERT INTO SUKU_CADANG (no_prod, kode_prod, nama_prod, kuantitas_prod, harga_jual) VALUES 
+ (1, 1, 'Alternator', 7, 2700000),
+ (2, 1, 'Starter Motor', 9, 510000),
+ (3, 1, 'Ignition Coil', 8, 175000),
+ (4, 1, 'Spark Plugs', 8, 46000),
+ (5, 1, 'Fuses', 15, 35000),
+ (6, 2, 'Fluid', 15, 138000),
+ (7, 2, 'Filter', 10, 50000),
+ (8, 2, 'Clutch Kit', 15, 45000),
+ (9, 2, 'Solenoid', 10, 145000),
+ (10, 2, 'Exhaust', 10, 158000),
+ (11, 3, 'Tires', 7, 440000),
+ (12, 3, 'Belt', 10, 190000),
+ (13, 3, 'Hoses', 15, 50000),
+ (14, 3, 'Bushings', 10, 300000),
+ (15, 3, 'Pedal', 8, 85000),
+ (16, 4, 'Piston', 7, 198000),
+ (17, 4, 'Rotors', 7, 3400000),
+ (18, 4, 'Muffler', 8, 450000),
+ (19, 4, 'Chassis', 2, 20000000),
+ (20, 4, 'Fan', 2, 11500000);
+
+INSERT INTO MEMBELI (tanggal_pembelian, id_p, no_prod, kuantitas_pembelian) VALUES 
+ ('2022-01-21', 1000013, 8, 6),
+ ('2022-02-14', 1000015, 20, 1),
+ ('2022-02-19', 1000001, 19, 1),
+ ('2022-03-08', 1000017, 12, 3),
+ ('2022-03-19', 1000008, 11, 1),
+ ('2022-04-14', 1000018, 11, 2),
+ ('2022-04-18', 1000020, 17, 3),
+ ('2022-04-21', 1000020, 1, 2),
+ ('2022-05-11', 1000011, 5, 2),
+ ('2022-05-28', 1000008, 9, 4),
+ ('2022-06-15', 1000008, 14, 3),
+ ('2022-07-09', 1000005, 3, 3),
+ ('2022-07-12', 1000009, 14, 2),
+ ('2022-07-19', 1000018, 16, 2),
+ ('2022-07-27', 1000006, 5, 5),
+ ('2022-09-24', 1000007, 4, 3),
+ ('2022-10-05', 1000017, 7, 5),
+ ('2022-10-08', 1000005, 17, 1),
+ ('2022-10-21', 1000020, 6, 3),
+ ('2022-11-15', 1000001, 7, 2),
+ ('2022-11-17', 1000002, 6, 5),
+ ('2022-11-20', 1000016, 2, 4),
+ ('2022-12-06', 1000020, 5, 2),
+ ('2022-12-18', 1000020, 11, 2),
+ ('2022-12-20', 1000001, 4, 2),
+ ('2023-03-04', 1000008, 2, 3),
+ ('2023-03-11', 1000004, 7, 3),
+ ('2023-03-25', 1000001, 4, 1),
+ ('2023-05-05', 1000017, 10, 5),
+ ('2023-05-18', 1000002, 3, 1);
+
+INSERT INTO PESANAN (no_prod, harga_beli) VALUES 
+ (1, 2300000),
+ (2, 480000),
+ (3, 140000),
+ (4, 30000),
+ (5, 25000),
+ (6, 115000),
+ (7, 38000),
+ (8, 29000),
+ (9, 125000),
+ (10, 132000),
+ (11, 383000),
+ (12, 150000),
+ (13, 35000),
+ (14, 250000),
+ (15, 60000),
+ (16, 170000),
+ (17, 3000000),
+ (18, 370000),
+ (19, 16500000),
+ (20, 9800000);
+
+INSERT INTO RIWAYAT_BELANJA_DARI (tanggal_pesan, no_prod, kuantitas_pesan, id_d) VALUES 
+ ('2022-01-27', 15, 4, 320002),
+ ('2022-06-28', 11, 2, 320003),
+ ('2022-10-07', 19, 1, 320001),
+ ('2022-11-27', 20, 1, 320001),
+ ('2022-12-26', 17, 4, 320002),
+ ('2023-02-03', 3, 2, 320003),
+ ('2023-02-13', 15, 5, 320004),
+ ('2023-02-28', 14, 5, 320004),
+ ('2023-03-29', 3, 2, 320004),
+ ('2023-04-13', 1, 4, 320001),
+ ('2023-04-15', 6, 4, 320003),
+ ('2023-04-22', 5, 7, 320002);
+
+/* Show Table */
+
+SELECT * FROM PELANGGAN;
+SELECT * FROM AKUN;
+SELECT * FROM MEMBELI;
+SELECT * FROM SUKU_CADANG;
+SELECT * FROM JENIS;
+SELECT * FROM KARYAWAN;
+SELECT * FROM PESANAN;
+SELECT * FROM RIWAYAT_BELANJA_DARI;
+SELECT * FROM DISTRIBUTOR;
+
+/* Simulasi*/
+
+INSERT INTO MEMBELI (tanggal_pembelian, id_p, no_prod, kuantitas_pembelian) VALUES 
+ ('2023-05-29', 1000020, 4, 2);
+
+INSERT INTO RIWAYAT_BELANJA_DARI (tanggal_pesan, no_prod, kuantitas_pesan, id_d) VALUES 
+ ('2023-05-29', 10, 3, 320004);
+
+DELETE FROM MEMBELI 
+WHERE tanggal_pembelian = '2023-05-29';
+
+DELETE FROM RIWAYAT_BELANJA_DARI 
+WHERE tanggal_pesan = '2023-05-29';
+
+DELETE FROM AKUN 
+WHERE id_p = 1000003;
+
+UPDATE AKUN
+SET password = 'Craig1234567'
+WHERE id_p = 1000011; 
+
+/* Analisis*/
+
+SELECT PELANGGAN.nama_dp, PELANGGAN.nama_b, PELANGGAN.alamat_p, MEMBELI.tanggal_pembelian,
+MEMBELI.no_prod, MEMBELI.hargatotal_pembelian, MEMBELI.kuantitas_pembelian, SUKU_CADANG.nama_prod
+FROM PELANGGAN
+INNER JOIN MEMBELI ON PELANGGAN.id_p = MEMBELI.id_p
+INNER JOIN SUKU_CADANG ON MEMBELI.no_prod = SUKU_CADANG.no_prod;
+
+SELECT SUKU_CADANG.nama_prod, SUKU_CADANG.kuantitas_prod, SUKU_CADANG.harga_jual, PESANAN.harga_beli
+FROM SUKU_CADANG
+INNER JOIN PESANAN ON PESANAN.no_prod = SUKU_CADANG.no_prod;
+
+SELECT tanggal_pembelian, COUNT(*) AS date_count
+FROM MEMBELI
+GROUP BY tanggal_pembelian
+ORDER BY date_count DESC;
+
+SELECT strftime('%Y-%m', tanggal_pembelian) AS month, COUNT(*) AS record_count
+FROM MEMBELI
+GROUP BY month
+ORDER BY record_count DESC;
+
+SELECT strftime('%Y-%m', tanggal_pembelian) AS month, SUKU_CADANG.nama_prod, SUM(kuantitas_pembelian) AS jumlah_penjualan
+FROM MEMBELI
+INNER JOIN SUKU_CADANG ON SUKU_CADANG.no_prod = MEMBELI.no_prod
+GROUP BY month
+ORDER BY jumlah_penjualan DESC;
+
+/* Drop Table */
+
+DROP TABLE PELANGGAN;
+DROP TABLE AKUN;
+DROP TABLE JENIS;
+DROP TABLE SUKU_CADANG;
+DROP TABLE MEMBELI;
+DROP TABLE KARYAWAN;
+DROP TABLE PESANAN;
+DROP TABLE DISTRIBUTOR;
+DROP TABLE RIWAYAT_BELANJA_DARI;</sql><current_tab id="0"/></tab_sql></sqlb_project>
