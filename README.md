@@ -4,7 +4,6 @@
 *Figure 1: Illustration of Database*
 
 ### Introduction
-
 This project is conducted as part of the course "Databases for Data Science". This project aims to create a spare parts database.
 
 ### Methods
